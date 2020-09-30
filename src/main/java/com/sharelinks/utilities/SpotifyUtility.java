@@ -1,17 +1,15 @@
 package com.sharelinks.utilities;
 
-import ca.weblite.webview.WebViewCLIClient;
 import com.google.gson.Gson;
 import com.sharelinks.ShareLinksConfig;
 import com.sharelinks.models.LinkItem;
 import com.sharelinks.models.LinkItemType;
-import com.sharelinks.models.spotify.SpotifyAccessToken;
-import com.sharelinks.models.spotify.SpotifyImage;
-import com.sharelinks.models.spotify.SpotifyLinkType;
-import com.sharelinks.models.spotify.SpotifyTrack;
+import com.sharelinks.models.spotify.*;
 
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
+import net.runelite.client.RuneLite;
+import net.runelite.client.util.LinkBrowser;
 import okhttp3.*;
 
 import javax.imageio.ImageIO;
@@ -19,27 +17,31 @@ import javax.inject.Inject;
 import javax.inject.Singleton;
 import javax.swing.*;
 import java.awt.image.BufferedImage;
-import java.io.UnsupportedEncodingException;
+import java.io.*;
+import java.net.MalformedURLException;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Base64;
+import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 
 @Slf4j
 @Singleton
 public class SpotifyUtility {
     private static final String SPOTIFY_CLIENT_ID = "818391e132f94352828d0de03d7dcdfd";
     private static final String SPOTIFY_AUTHORIZATION_URI = "https://accounts.spotify.com/authorize";
-    private static final String SPOTIFY_REDIRECT_URI = "https://www.spotify.com";
+    private static final String SPOTIFY_REDIRECT_URI = "https://raw.githubusercontent.com/kashmoneygt/share-media/master/SPOTIFY_REDIRECT.md";
+    private static final int SPOTIFY_REDIRECT_WAIT_SECONDS = 60;
     private static final String SPOTIFY_TOKEN_API = "https://accounts.spotify.com/api/token";
     private static final String SPOTIFY_GET_TRACK_API = "https://api.spotify.com/v1/tracks/";
+    private static final String TOKEN_FILE = ".spotify_token";
+    private static final int TOKEN_EXPIRATION_ADDITIONAL_SECONDS = 60;
 
     private SpotifyAccessToken accessToken;
 
@@ -52,6 +54,12 @@ public class SpotifyUtility {
     @Inject
     private OkHttpClient okHttpClient;
 
+    @Inject
+    private ClipboardUtility clipboardUtility;
+
+    @Inject
+    private CacheUtility cacheUtility;
+
     public LinkItem CreateLinkItemFromSpotifyTrackId(String trackId) {
         SpotifyTrack track = GetSpotifyTrack(trackId);
         ImageIcon icon = GetSpotifyIcon(track);
@@ -61,21 +69,20 @@ public class SpotifyUtility {
     }
 
     private SpotifyTrack GetSpotifyTrack(String trackId) {
-        // TODO : get token
-        GetSpotifyAccessToken();
+        SetSpotifyAccessToken();
         try {
-            Request getTrackRequest = new Request.Builder()
+            Request request = new Request.Builder()
                     .url(SPOTIFY_GET_TRACK_API + trackId)
                     .header("Authorization", accessToken.token_type + " " + accessToken.access_token)
                     .build();
 
-            Response getTrackResponse = okHttpClient.newCall(getTrackRequest).execute();
-            if (!getTrackResponse.isSuccessful()) {
+            Response response = okHttpClient.newCall(request).execute();
+            if (!response.isSuccessful()) {
                 log.warn("[External Plugin][Share Links] Error getting track using Spotify access token.");
                 return null;
             }
 
-            return new Gson().fromJson(getTrackResponse.body().string(), SpotifyTrack.class);
+            return new Gson().fromJson(response.body().string(), SpotifyTrack.class);
         } catch (Exception e) {
             log.warn(null, e);
             return null;
@@ -103,13 +110,29 @@ public class SpotifyUtility {
         }
     }
 
-    public void GetSpotifyAccessToken() {
+    // TODO : change to private void and set the private accessToken object
+    public SpotifyAccessToken SetSpotifyAccessToken() {
+        SpotifyAccessToken accessToken = (SpotifyAccessToken) cacheUtility.ReadObjectFromDisk(TOKEN_FILE);
+        if (accessToken != null && IsExpired(accessToken)) {
+            accessToken = GetSpotifyAccessTokenFromRefreshToken(accessToken);
+        }
+
+        if (accessToken == null) {
+            accessToken = GetSpotifyAccessTokenFromAuthorizationFlow();
+            cacheUtility.WriteObjectToDisk(accessToken, TOKEN_FILE);
+        }
+
+        this.accessToken = accessToken;
+        return accessToken;
+    }
+
+    private SpotifyAccessToken GetSpotifyAccessTokenFromAuthorizationFlow() {
         try {
             String codeVerifier = generateCodeVerifier();
             String codeChallenge = generateCodeChallange(codeVerifier);
             String state = UUID.randomUUID().toString();
 
-            HttpUrl url = HttpUrl.parse(SPOTIFY_AUTHORIZATION_URI).newBuilder()
+            HttpUrl userAuthUrl = HttpUrl.parse(SPOTIFY_AUTHORIZATION_URI).newBuilder()
                     .addQueryParameter("client_id", SPOTIFY_CLIENT_ID)
                     .addQueryParameter("response_type", "code")
                     .addQueryParameter("redirect_uri", SPOTIFY_REDIRECT_URI)
@@ -118,77 +141,125 @@ public class SpotifyUtility {
                     .addQueryParameter("state", state)
                     .build();
 
-            // Because we are creating a WebView pop-up, we should do it on the Event Dispatching Thread
-            SwingUtilities.invokeLater(() -> {
-                try {
-                    String redirectUri = PerformUserAuthAndGetRedirectUri(url.toString()).get();
-                    log.warn("Hi: " + redirectUri);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                } catch (ExecutionException e) {
-                    e.printStackTrace();
-                }
-            });
+            String redirectUriString = PerformUserAuthAndGetRedirectUri(userAuthUrl.toString());
+            SpotifyRedirectUri redirectUri = ParseRedirectUri(redirectUriString);
+            if (redirectUri == null) {
+                log.warn("[External Plugin][Share Links] Error getting a valid redirect URL from user.");
+                return null;
+            }
+            if (!redirectUri.error.isEmpty()) {
+                log.warn("[External Plugin][Share Links] RedirectURI returned error.", redirectUri.error);
+                return null;
+            }
+            if (!redirectUri.state.equalsIgnoreCase(state)) {
+                log.warn("[External Plugin][Share Links] RedirectURI state does not equal original state.", state, redirectUri.state);
+                return null;
+            }
 
-
+            return GetAccessTokenFromUserAuth(redirectUri, codeVerifier);
         } catch (Exception e) {
             log.warn(null, e);
+            return null;
         }
     }
 
-    private CompletableFuture<String> PerformUserAuthAndGetRedirectUri(String authorizationUri) {
-        // TODO : open browser the normal way and point to a github README saying to copy link and close browser
-        AtomicReference<String> redirectUri = new AtomicReference<>("");
-        WebViewCLIClient webview = (WebViewCLIClient) new WebViewCLIClient.Builder()
-                .url(authorizationUri)
-                .title("Spotify User Authorization")
-                .size(client.getCanvasWidth() / 2, client.getCanvasHeight() / 2)
-                .build();
-
-        webview.addLoadListener(evt -> {
-            log.warn(evt.getURL());
-            if (evt.getURL().startsWith(SPOTIFY_REDIRECT_URI)) {
-                log.warn("got redirect uri");
-                redirectUri.set(evt.getURL());
-
-            }
-        });
-        // it waits 60 seconds...
-//            TimeUnit.SECONDS.sleep(60);
-        while (redirectUri.get().isEmpty()) {
-        }
-        log.warn("done...");
+    private String PerformUserAuthAndGetRedirectUri(String authorizationUri) {
         try {
-            log.warn("closing...");
-            webview.close();
-            log.warn("closed...");
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return CompletableFuture.completedFuture(redirectUri.get());
-    }
-
-    private CompletableFuture<Void> CloseWebView(WebViewCLIClient webview) {
-        try {
-            TimeUnit.SECONDS.sleep(5);
-            webview.close();
+            LinkBrowser.browse(authorizationUri);
+            String redirectUri = clipboardUtility.GetStringContainingSubstringFromClipboard(SPOTIFY_REDIRECT_URI, SPOTIFY_REDIRECT_WAIT_SECONDS);
+            return redirectUri;
         } catch (InterruptedException e) {
             e.printStackTrace();
-        } catch (Exception e) {
-            e.printStackTrace();
         }
-        return CompletableFuture.completedFuture(null);
+        return "";
     }
 
-    private void temp() {
-//        Response response = okHttpClient.newCall(request).execute();
-//        if (!response.isSuccessful()) {
-//            log.warn("[External Plugin][Share Links] Error getting Spotify access token.");
-//        }
+    private SpotifyRedirectUri ParseRedirectUri(String redirectUriString) throws URISyntaxException {
+        if (redirectUriString.isEmpty()) {
+            return null;
+        }
 
-//            accessToken = new Gson().fromJson(response.body().string(), SpotifyAccessToken.class);
-//            accessToken.creation_time = LocalDateTime.now();
+        URI redirectUri = new URI(redirectUriString);
+        String[] params = redirectUri.getQuery().split("\\?");
+        if (params.length == 2) {
+            String code = params[0];
+            String state = params[1].split("=")[-1];
+            if (params[0].contains("error")) {
+                return new SpotifyRedirectUri("", code.split("=")[-1], state);
+            } else {
+                return new SpotifyRedirectUri(code.split("=")[-1], "", state);
+            }
+        }
+
+        return null;
     }
+
+    private SpotifyAccessToken GetAccessTokenFromUserAuth(SpotifyRedirectUri redirectUri, String codeVerifier) {
+        try {
+            RequestBody body = new FormBody.Builder()
+                    .add("client_id", SPOTIFY_CLIENT_ID)
+                    .add("grant_type", "authorization_code")
+                    .add("code", redirectUri.code)
+                    .add("redirect_uri", SPOTIFY_REDIRECT_URI)
+                    .add("code_verifier", codeVerifier)
+                    .build();
+
+            Request request = new Request.Builder()
+                    .url(SPOTIFY_TOKEN_API)
+                    .post(body)
+                    .build();
+
+            Response response = okHttpClient.newCall(request).execute();
+            if (!response.isSuccessful()) {
+                log.warn("[External Plugin][Share Links] Error getting access token from user auth.");
+                return null;
+            }
+
+            accessToken = new Gson().fromJson(response.body().string(), SpotifyAccessToken.class);
+            accessToken.creation_time = LocalDateTime.now();
+            return accessToken;
+        } catch (Exception e) {
+            log.warn(null, e);
+            return null;
+        }
+    }
+
+    private boolean IsExpired(SpotifyAccessToken accessToken) {
+        return accessToken.creation_time
+                .plusSeconds(accessToken.expires_in)
+                .plusSeconds(TOKEN_EXPIRATION_ADDITIONAL_SECONDS)
+                .isBefore(LocalDateTime.now());
+    }
+
+    private SpotifyAccessToken GetSpotifyAccessTokenFromRefreshToken(SpotifyAccessToken accessToken) {
+        // A refresh token that has been obtained through PKCE can be exchanged for an access token only once, after which it becomes invalid.
+        try {
+            RequestBody body = new FormBody.Builder()
+                    .add("client_id", SPOTIFY_CLIENT_ID)
+                    .add("grant_type", "refresh_token")
+                    .add("refresh_token", accessToken.refresh_token)
+                    .build();
+
+            Request request = new Request.Builder()
+                    .url(SPOTIFY_TOKEN_API)
+                    .post(body)
+                    .build();
+
+            Response response = okHttpClient.newCall(request).execute();
+            if (!response.isSuccessful()) {
+                log.warn("[External Plugin][Share Links] Error getting access token from refresh token.");
+                return null;
+            }
+
+            accessToken = new Gson().fromJson(response.body().string(), SpotifyAccessToken.class);
+            accessToken.creation_time = LocalDateTime.now();
+            return accessToken;
+        } catch (Exception e) {
+            log.warn(null, e);
+            return null;
+        }
+    }
+
 
     private String generateCodeVerifier() {
         SecureRandom secureRandom = new SecureRandom();

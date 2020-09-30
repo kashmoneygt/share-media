@@ -2,6 +2,7 @@ package com.sharelinks;
 
 import com.google.inject.Provides;
 import com.sharelinks.models.LinkItem;
+import com.sharelinks.utilities.ClipboardUtility;
 import com.sharelinks.utilities.MessageUtility;
 import com.sharelinks.utilities.SpotifyUtility;
 import lombok.extern.slf4j.Slf4j;
@@ -47,6 +48,9 @@ public class ShareLinksPlugin extends Plugin {
     private SpotifyUtility spotifyUtility;
 
     @Inject
+    private ClipboardUtility clipboardUtility;
+
+    @Inject
     private MessageUtility messageUtility;
 
     private ShareLinksPanel shareLinksPanel;
@@ -54,7 +58,7 @@ public class ShareLinksPlugin extends Plugin {
 
     @Override
     protected void startUp() {
-        spotifyUtility.GetSpotifyAccessToken();
+        spotifyUtility.SetSpotifyAccessToken();
 
         shareLinksPanel = injector.getInstance(ShareLinksPanel.class);
         final BufferedImage icon = ImageUtil.getResourceStreamFromClass(getClass(), "link-resized.png");
@@ -90,7 +94,7 @@ public class ShareLinksPlugin extends Plugin {
             // for a valid link and update their message to contain the link
             if (message.length() == SHARE_STRING.length()
                     && chatMessage.getName().replace(" ", " ").contains(client.getLocalPlayer().getName())) {
-                String clipboardString = messageUtility.GetStringFromClipboard();
+                String clipboardString = clipboardUtility.GetStringFromClipboard();
 
                 Matcher matcher = SPOTIFY_TRACK_PATTERN.matcher(clipboardString);
                 if (config.enableSpotifyLinks() && matcher.find()) {

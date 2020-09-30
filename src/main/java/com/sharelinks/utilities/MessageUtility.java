@@ -23,21 +23,6 @@ public class MessageUtility {
     @Inject
     private ChatMessageManager chatMessageManager;
 
-    public String GetStringFromClipboard() {
-        String clipboardString;
-        try {
-            clipboardString = Toolkit.getDefaultToolkit()
-                    .getSystemClipboard()
-                    .getContents(null)
-                    .getTransferData(DataFlavor.stringFlavor).toString();
-        } catch (Exception e) {
-            log.warn("[External Plugin][Share Links] Error reading user's clipboard.");
-            clipboardString = "";
-        }
-
-        return clipboardString;
-    }
-
     public void UpdateChatMessage(ChatMessage chatMessage, String updatedString) {
         String response = new ChatMessageBuilder()
                 .append(ChatColorType.NORMAL)
