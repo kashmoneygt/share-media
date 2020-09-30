@@ -1,0 +1,1 @@
+Please copy the URL in your address bar and close this tab. Thanks for using the Share Links plugin :)
