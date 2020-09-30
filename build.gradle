@@ -23,9 +23,11 @@ dependencies {
 	testImplementation group: 'net.runelite', name:'client', version: runeLiteVersion, {
 		exclude group: 'ch.qos.logback', module: 'logback-classic'
 	}
+
+	implementation fileTree(dir: 'libs', include: ['*.jar'])
 }
 
-group = 'com.example'
+group = 'com.sharelinks'
 version = '1.0-SNAPSHOT'
 sourceCompatibility = '1.8'
 
