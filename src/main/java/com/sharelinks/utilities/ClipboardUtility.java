@@ -26,13 +26,14 @@ public class ClipboardUtility {
         return clipboardString;
     }
 
-    public String GetStringContainingSubstringFromClipboard(String substring, int secondsToWait) throws InterruptedException {
+    public String GetStringStartingWithSubstringFromClipboard(String substring, int secondsToWait) throws InterruptedException {
         int elapsed = 0;
         do {
-            if (GetStringFromClipboard().contains(substring)) {
+            if (GetStringFromClipboard().startsWith(substring)) {
                 return GetStringFromClipboard();
             }
             TimeUnit.SECONDS.sleep(1);
+            elapsed++;
         } while (elapsed < secondsToWait);
         return "";
     }

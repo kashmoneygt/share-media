@@ -5,10 +5,8 @@ import com.sharelinks.ShareLinksConfig;
 import com.sharelinks.models.LinkItem;
 import com.sharelinks.models.LinkItemType;
 import com.sharelinks.models.spotify.*;
-
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
-import net.runelite.client.RuneLite;
 import net.runelite.client.util.LinkBrowser;
 import okhttp3.*;
 
@@ -17,18 +15,14 @@ import javax.inject.Inject;
 import javax.inject.Singleton;
 import javax.swing.*;
 import java.awt.image.BufferedImage;
-import java.io.*;
-import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Base64;
-import java.util.List;
 import java.util.UUID;
 
 @Slf4j
@@ -110,20 +104,17 @@ public class SpotifyUtility {
         }
     }
 
-    // TODO : change to private void and set the private accessToken object
-    public SpotifyAccessToken SetSpotifyAccessToken() {
+    private void SetSpotifyAccessToken() {
         SpotifyAccessToken accessToken = (SpotifyAccessToken) cacheUtility.ReadObjectFromDisk(TOKEN_FILE);
         if (accessToken != null && IsExpired(accessToken)) {
             accessToken = GetSpotifyAccessTokenFromRefreshToken(accessToken);
         }
-
         if (accessToken == null) {
             accessToken = GetSpotifyAccessTokenFromAuthorizationFlow();
             cacheUtility.WriteObjectToDisk(accessToken, TOKEN_FILE);
         }
 
         this.accessToken = accessToken;
-        return accessToken;
     }
 
     private SpotifyAccessToken GetSpotifyAccessTokenFromAuthorizationFlow() {
@@ -148,11 +139,11 @@ public class SpotifyUtility {
                 return null;
             }
             if (!redirectUri.error.isEmpty()) {
-                log.warn("[External Plugin][Share Links] RedirectURI returned error.", redirectUri.error);
+                log.warn("[External Plugin][Share Links] RedirectURI returned error=" + redirectUri.error);
                 return null;
             }
             if (!redirectUri.state.equalsIgnoreCase(state)) {
-                log.warn("[External Plugin][Share Links] RedirectURI state does not equal original state.", state, redirectUri.state);
+                log.warn("[External Plugin][Share Links] RedirectURI state=" + redirectUri.state + " does not equal original state=" + state);
                 return null;
             }
 
@@ -166,11 +157,11 @@ public class SpotifyUtility {
     private String PerformUserAuthAndGetRedirectUri(String authorizationUri) {
         try {
             LinkBrowser.browse(authorizationUri);
-            String redirectUri = clipboardUtility.GetStringContainingSubstringFromClipboard(SPOTIFY_REDIRECT_URI, SPOTIFY_REDIRECT_WAIT_SECONDS);
-            return redirectUri;
+            return clipboardUtility.GetStringStartingWithSubstringFromClipboard(SPOTIFY_REDIRECT_URI, SPOTIFY_REDIRECT_WAIT_SECONDS);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
+
         return "";
     }
 
@@ -180,14 +171,14 @@ public class SpotifyUtility {
         }
 
         URI redirectUri = new URI(redirectUriString);
-        String[] params = redirectUri.getQuery().split("\\?");
+        String[] params = redirectUri.getQuery().split("&");
         if (params.length == 2) {
-            String code = params[0];
-            String state = params[1].split("=")[-1];
-            if (params[0].contains("error")) {
-                return new SpotifyRedirectUri("", code.split("=")[-1], state);
+            String[] code = params[0].split("=");
+            String[] state = params[1].split("=");
+            if (code[0].contains("error")) {
+                return new SpotifyRedirectUri("", code[code.length - 1], state[state.length - 1]);
             } else {
-                return new SpotifyRedirectUri(code.split("=")[-1], "", state);
+                return new SpotifyRedirectUri(code[code.length - 1], "", state[state.length - 1]);
             }
         }
 
@@ -268,7 +259,7 @@ public class SpotifyUtility {
         return Base64.getUrlEncoder().withoutPadding().encodeToString(codeVerifier);
     }
 
-    private String generateCodeChallange(String codeVerifier) throws UnsupportedEncodingException, NoSuchAlgorithmException {
+    private String generateCodeChallange(String codeVerifier) throws NoSuchAlgorithmException {
         byte[] bytes = codeVerifier.getBytes(StandardCharsets.US_ASCII);
         MessageDigest messageDigest = MessageDigest.getInstance("SHA-256");
         messageDigest.update(bytes, 0, bytes.length);

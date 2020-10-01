@@ -10,8 +10,6 @@ import net.runelite.client.chat.ChatMessageManager;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
-import java.awt.*;
-import java.awt.datatransfer.DataFlavor;
 
 @Slf4j
 @Singleton

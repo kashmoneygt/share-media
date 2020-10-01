@@ -1,7 +1,7 @@
 package com.sharelinks;
 
-import com.google.inject.Provides;
 import com.sharelinks.models.LinkItem;
+import com.sharelinks.utilities.CacheUtility;
 import com.sharelinks.utilities.ClipboardUtility;
 import com.sharelinks.utilities.MessageUtility;
 import com.sharelinks.utilities.SpotifyUtility;
@@ -9,7 +9,6 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.events.ChatMessage;
-import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
@@ -53,27 +52,29 @@ public class ShareLinksPlugin extends Plugin {
     @Inject
     private MessageUtility messageUtility;
 
+    @Inject
+    private CacheUtility cacheUtility;
+
     private ShareLinksPanel shareLinksPanel;
-    private NavigationButton navButton;
 
     @Override
     protected void startUp() {
-        spotifyUtility.SetSpotifyAccessToken();
-
         shareLinksPanel = injector.getInstance(ShareLinksPanel.class);
         final BufferedImage icon = ImageUtil.getResourceStreamFromClass(getClass(), "link-resized.png");
-        navButton = NavigationButton.builder()
+        NavigationButton navButton = NavigationButton.builder()
                 .tooltip("Share Links")
                 .icon(icon)
                 .priority(10)
                 .panel(shareLinksPanel)
                 .build();
         clientToolbar.addNavigation(navButton);
+
+        cacheUtility.CreateShareLinksDir();
     }
 
     @Override
-    protected void shutDown() throws Exception {
-        // TODO : Save shared links on local disk/RuneLite account
+    protected void shutDown() {
+        // For saving shared links on local disk/RuneLite account
     }
 
     @Subscribe
@@ -93,6 +94,7 @@ public class ShareLinksPlugin extends Plugin {
             // If the local user typed "!share", check their clipboard
             // for a valid link and update their message to contain the link
             if (message.length() == SHARE_STRING.length()
+                    && client.getLocalPlayer() != null && client.getLocalPlayer().getName() != null
                     && chatMessage.getName().replace(" ", " ").contains(client.getLocalPlayer().getName())) {
                 String clipboardString = clipboardUtility.GetStringFromClipboard();
 
@@ -122,8 +124,4 @@ public class ShareLinksPlugin extends Plugin {
         }
     }
 
-    @Provides
-    ShareLinksConfig provideConfig(ConfigManager configManager) {
-        return configManager.getConfig(ShareLinksConfig.class);
-    }
 }
