@@ -8,7 +8,7 @@ import java.io.*;
 
 @Slf4j
 @Singleton
-public class CacheUtility {
+public class DiskUtility {
 
     public static final String SHARE_LINKS_DIR = RuneLite.RUNELITE_DIR.getPath() + File.separator + "share-links";
 

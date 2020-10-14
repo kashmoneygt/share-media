@@ -30,7 +30,7 @@ public class ShareLinksPanel extends PluginPanel {
     private static final int TIME_WIDTH = 20;
 
     static {
-        DEFAULT_SPOTIFY_ICON = new ImageIcon(ImageUtil.getResourceStreamFromClass(ShareLinksPanel.class, "spotify.png"));
+        DEFAULT_SPOTIFY_ICON = new ImageIcon(ImageUtil.getResourceStreamFromClass(ShareLinksPanel.class, "default-spotify.png"));
     }
 
     private final ShareLinksConfig config;
@@ -49,9 +49,9 @@ public class ShareLinksPanel extends PluginPanel {
     public void addItemToPanel(LinkItem item) {
         // Layout of an item:
         // |--------------------------|
-        // ||----| HEADER (TYPE)      |
-        // ||-AV-|   --CONTENT--      |
-        // ||----|      (NAME)        |
+        // ||----| TYPE          TIME |
+        // ||ICON|       TITLE        |
+        // ||----|      CONTENT       |
         // |--------------------------|
 
         // Define full panel
@@ -74,11 +74,11 @@ public class ShareLinksPanel extends PluginPanel {
                 break;
         }
 
-        // Define panel to contain header and content
-        JPanel headerAndContent = new JPanel();
-        headerAndContent.setLayout(new BoxLayout(headerAndContent, BoxLayout.Y_AXIS));
-        headerAndContent.setBorder(new EmptyBorder(4, 8, 4, 4));
-        headerAndContent.setBackground(null);
+        // Define panel to contain header and body
+        JPanel headerAndBody = new JPanel();
+        headerAndBody.setLayout(new BoxLayout(headerAndBody, BoxLayout.Y_AXIS));
+        headerAndBody.setBorder(new EmptyBorder(4, 8, 4, 4));
+        headerAndBody.setBackground(null);
 
         // Define header, which contains item type and timestamp
         JPanel header = new JPanel();
@@ -102,28 +102,35 @@ public class ShareLinksPanel extends PluginPanel {
         header.add(typeLabel, BorderLayout.WEST);
         header.add(timeLabel, BorderLayout.EAST);
 
-        // Define content panel, which contains item name for now
-        JPanel content = new JPanel(new BorderLayout());
-        content.setBackground(null);
+        // Define body, which contains item title and content
+        JPanel body = new JPanel(new BorderLayout());
+        body.setBackground(null);
+
+        // Define title
+        JLabel titleLabel = new JLabel(item.getTitle(), SwingConstants.CENTER);
+        titleLabel.setBorder(new EmptyBorder(2, 0, 0, 0));
+        titleLabel.setFont(FontManager.getRunescapeBoldFont());
+        titleLabel.setForeground(darkerForeground);
 
         // Define content
-        JLabel contentLabel = new JLabel(item.getTitle());
+        JLabel contentLabel = new JLabel(item.getContent(), SwingConstants.CENTER);
         contentLabel.setBorder(new EmptyBorder(2, 0, 0, 0));
-        contentLabel.setFont(FontManager.getRunescapeBoldFont());
+        contentLabel.setFont(FontManager.getRunescapeFont());
         contentLabel.setForeground(darkerForeground);
 
-        content.add(contentLabel, BorderLayout.CENTER);
+        body.add(titleLabel, BorderLayout.NORTH);
+        body.add(contentLabel, BorderLayout.SOUTH);
 
-        // Set headerAndContent panel as parent of header and content panels
-        headerAndContent.add(header);
-        headerAndContent.add(content);
-        headerAndContent.add(new Box.Filler(new Dimension(0, 0),
+        // Set headerAndBody panel as parent of header and body panels
+        headerAndBody.add(header);
+        headerAndBody.add(body);
+        headerAndBody.add(new Box.Filler(new Dimension(0, 0),
                 new Dimension(0, Short.MAX_VALUE),
                 new Dimension(0, Short.MAX_VALUE)));
 
-        // Set full panel as parent of icon and headerAndContent panels
+        // Set full panel as parent of icon and headerAndBody panels
         fullPanel.add(icon, BorderLayout.WEST);
-        fullPanel.add(headerAndContent, BorderLayout.CENTER);
+        fullPanel.add(headerAndBody, BorderLayout.CENTER);
 
         Color backgroundColor = fullPanel.getBackground();
         Color hoverColor = backgroundColor.brighter().brighter();

@@ -6,7 +6,6 @@ import com.sharelinks.models.LinkItem;
 import com.sharelinks.models.LinkItemType;
 import com.sharelinks.models.spotify.*;
 import lombok.extern.slf4j.Slf4j;
-import net.runelite.api.Client;
 import net.runelite.client.util.LinkBrowser;
 import okhttp3.*;
 
@@ -40,9 +39,6 @@ public class SpotifyUtility {
     private SpotifyAccessToken accessToken;
 
     @Inject
-    private Client client;
-
-    @Inject
     private ShareLinksConfig config;
 
     @Inject
@@ -52,7 +48,7 @@ public class SpotifyUtility {
     private ClipboardUtility clipboardUtility;
 
     @Inject
-    private CacheUtility cacheUtility;
+    private DiskUtility diskUtility;
 
     public LinkItem CreateLinkItemFromSpotifyTrackId(String trackId) {
         SpotifyTrack track = GetSpotifyTrack(trackId);
@@ -105,13 +101,13 @@ public class SpotifyUtility {
     }
 
     private void SetSpotifyAccessToken() {
-        SpotifyAccessToken accessToken = (SpotifyAccessToken) cacheUtility.ReadObjectFromDisk(TOKEN_FILE);
+        SpotifyAccessToken accessToken = (SpotifyAccessToken) diskUtility.ReadObjectFromDisk(TOKEN_FILE);
         if (accessToken != null && IsExpired(accessToken)) {
             accessToken = GetSpotifyAccessTokenFromRefreshToken(accessToken);
         }
         if (accessToken == null) {
             accessToken = GetSpotifyAccessTokenFromAuthorizationFlow();
-            cacheUtility.WriteObjectToDisk(accessToken, TOKEN_FILE);
+            diskUtility.WriteObjectToDisk(accessToken, TOKEN_FILE);
         }
 
         this.accessToken = accessToken;
@@ -250,7 +246,6 @@ public class SpotifyUtility {
             return null;
         }
     }
-
 
     private String generateCodeVerifier() {
         SecureRandom secureRandom = new SecureRandom();
