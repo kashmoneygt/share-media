@@ -4,6 +4,7 @@ Share links like Spotify music and YouTube videos with others on OSRS
 ![How it works](share-links.gif)
 
 ## Share Music on Spotify
+**Note: When sharing a link for the first time once you boot up RuneLite, a browser window will pop up and ask you to allow access to Spotify. This is only so that we can get music information like album art -- we do not get any of your information.**
 1. Find a track on Spotify that you want to share. 
 2. Copy its link by right clicking -> Share -> "Copy Song Link" or "Copy Spotify URI". You can do this on both Spotify Desktop and Web.
 3. In OSRS, type "!share" to share the track. You and anyone who sees the share message will have their Share Links Panel on the right updated with the track.
