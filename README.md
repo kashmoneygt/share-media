@@ -1,7 +1,7 @@
 # Share Links
 Share links like Spotify music and YouTube videos with others on OSRS
 
-TODO: Add a nice gif
+![How it works](share-links.gif)
 
 ## Share Music on Spotify
 1. Find a track on Spotify that you want to share. 
